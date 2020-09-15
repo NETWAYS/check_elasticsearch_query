@@ -3,13 +3,21 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/NETWAYS/go-check"
-	"encoding/json"
 	"github.com/elastic/go-elasticsearch/v7"
 	"github.com/spf13/pflag"
 	"log"
 	"strconv"
+)
+
+var (
+	// For deserialization of the response into a map
+	Response      map[string]interface{}
+	TotalHits     int
+	LatestMessage string
+	ReturnCode    int
 )
 
 type Config struct {
@@ -29,58 +37,48 @@ type Config struct {
 	PaginateSearchResult int
 }
 
-var (
-	// For deserialization of the response into a map
-	Response      map[string]interface{}
-	TotalHits     int
-	LatestMessage string
-	ReturnCode    int
-)
-
 func BuildConfigFlags(fs *pflag.FlagSet) (config *Config) {
 	config = &Config{}
 
 	fs.StringVarP(&config.Host, "host", "H", "127.0.0.1",
-		"Host name, IP Address of the elasticsearch node")
+		"Host name, IP Address of the elasticsearch host")
 
 	fs.IntVarP(&config.Port, "port", "p", 9200,
-		"Port number of the elasticsearch node")
+		"Port number of the elasticsearch host")
 
 	fs.StringVarP(&config.User, "user", "U", "",
-		"Username of the elasticsearch node")
+		"Username of the elasticsearch host")
 
 	fs.StringVarP(&config.Password, "password", "P", "",
 		"Password of the user")
 
 	fs.StringVarP(&config.Query, "query", "q", "",
-		"Elasticsearch query, e.g. 'event.dataset=sample_web_logs and @timestamp: [ 2020-09-05T20:44:46.291Z ]")
+		"Elasticsearch query, e.g. 'event.dataset=sample_web_logs and @timestamp: [ 2020-09-05T20:44:46.291Z ]'")
 
-	fs.StringVarP(&config.Index, "index", "i", "",
+	fs.StringVarP(&config.Index, "index", "i", "_all",
 		"The index which will be used")
 
-	fs.StringVarP(&config.Filter, "filter", "f", "",
-		"Name of saved filter in Kibana")
+	// TODO: WIP
+	//fs.StringVarP(&config.Filter, "filter", "f", "",
+	//	"Name of saved filter in Kibana")
 
-	fs.IntVarP(&config.MessageCharacters, "msgchars", "", 255,
-		"Number of characters to display in latest log message as integer (default: 255)")
+	fs.IntVar(&config.MessageCharacters, "msgchars", 255,
+		"Number of characters to display in latest message as integer. To disable set value to 0")
 
-	fs.StringVarP(&config.MessageKey, "msgkey", "", "",
-		"For query searches only. Index of message to display. eg. full_message")
+	fs.StringVar(&config.MessageKey, "msgkey", "message",
+		"For query searches only. Index of message to display. eg. message")
 
-	fs.StringVarP(&config.SourceKey, "srckey", "", "",
-		"For query searches only. Index of log source")
-
-	fs.IntVarP(&config.PaginateSearchResult, "PaginateSearchResult", "", 1,
+	fs.IntVar(&config.PaginateSearchResult, "PaginateSearchResult",1,
 		"Returns the top x matching documents")
 
 	fs.IntVarP(&config.Critical, "critical", "c", 10,
-		"Critical threshold")
+		"Critical threshold for total hits (default: 10)")
 
 	fs.IntVarP(&config.Warning, "warning", "w", 5,
-		"Warning threshold")
+		"Warning threshold for total hits (default: 5)")
 
 	_ = fs.MarkHidden("PaginateSearchResult")
-
+	
 	return
 }
 
@@ -95,11 +93,14 @@ func (c *Config) Validate() (err error) {
 		return
 	}
 
-	if c.MessageKey != "" || c.SourceKey != "" {
-		if c.Query == "" {
-			err = fmt.Errorf("query has to be configured to use --msgkey or --srckey")
+	if c.Query == "" {
+		err = fmt.Errorf("query has to be configured")
+		return
+	}
+
+	if c.MessageKey != ""  && c.Query == "" {
+			err = fmt.Errorf("query has to be configured to use --msgkey")
 			return
-		}
 	}
 
 	// Validation complete
@@ -108,7 +109,7 @@ func (c *Config) Validate() (err error) {
 	return nil
 }
 
-func (c *Config) Run() (rc int, output string, err error) {
+func (c *Config) Run() (ReturnCode int, output string, err error) {
 	if !c.Validated {
 		panic("you need to call Validate() before Run()")
 	}
@@ -167,7 +168,6 @@ func (c *Config) Run() (rc int, output string, err error) {
 	ElasticInfo, err = ElasticClient.Search(
 		ElasticClient.Search.WithContext(context.Background()),
 		ElasticClient.Search.WithIndex(c.Index),
-		//ElasticClient.Search.WithIndex("_all"),
 		ElasticClient.Search.WithBody(&buf),
 		ElasticClient.Search.WithTrackTotalHits(true),
 		ElasticClient.Search.WithPretty(),
@@ -202,24 +202,28 @@ func (c *Config) Run() (rc int, output string, err error) {
 
 	for count, hit := range Response["hits"].(map[string]interface{})["hits"].([]interface{}) {
 		if count == (c.PaginateSearchResult - 1) {
-			//log.Printf("%s", hit.(map[string]interface{})["_source"].(map[string]interface{})[c.MessageKey])
 			//log.Printf(" * ID=%s", hit.(map[string]interface{})["_id"])
-			LatestMessage = hit.(map[string]interface{})["_source"].(map[string]interface{})["message"].(string)
+			LatestMessage = hit.(map[string]interface{})["_source"].(map[string]interface{})[c.MessageKey].(string)
 		}
 	}
 
-	//log.Printf("%s", LatestMessage)
-	//log.Printf("%d", TotalHits)
-
 	if TotalHits >= c.Critical {
-		rc = check.Critical
+		ReturnCode = check.Critical
 	} else if TotalHits >= c.Warning {
-		rc = check.Warning
+		ReturnCode = check.Warning
 	} else {
-		rc = check.OK
+		ReturnCode = check.OK
 	}
 
 	output = "Total hits: " + strconv.Itoa(TotalHits)
+
+	if c.MessageCharacters != 0 {
+		if len(LatestMessage) <= c.MessageCharacters {
+			output += "\n" + c.MessageKey + ": "  + LatestMessage
+		} else {
+			output += "\n" + c.MessageKey + ": "  + LatestMessage[0:c.MessageCharacters]
+		}
+	}
 
 	return
 }
