@@ -92,7 +92,7 @@ func BuildConfigFlags(fs *pflag.FlagSet) (config *Config) {
 
 	_ = fs.MarkHidden("paginateSearchResult")
 	_ = fs.MarkHidden("exclude")
-	
+
 	return
 }
 
