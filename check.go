@@ -34,7 +34,6 @@ type Config struct {
 	excludeValues        []string
 	warning              int
 	critical             int
-	validated            bool
 	paginateSearchResult int
 }
 
@@ -92,12 +91,11 @@ func BuildConfigFlags(fs *pflag.FlagSet) (config *Config) {
 
 	_ = fs.MarkHidden("paginateSearchResult")
 	_ = fs.MarkHidden("exclude")
-	
+
 	return
 }
 
 func (c *Config) Validate() (err error) {
-	c.validated = false
 
 	if c.user != "" && c.password == "" {
 		err = fmt.Errorf("password must be configured")
@@ -133,15 +131,11 @@ func (c *Config) Validate() (err error) {
 	}
 
 	// Validation complete
-	c.validated = true
 
 	return nil
 }
 
 func (c *Config) Run() (returnCode int, output string, err error) {
-	if !c.validated {
-		panic("you need to call Validate() before Run()")
-	}
 
 	cfg := elasticsearch.Config{
 		Addresses: []string{"http://" + c.host + ":" + strconv.Itoa(c.port)},

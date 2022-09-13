@@ -4,7 +4,7 @@ check_elasticsearch_query
 Check the total hits/results of an elasticsearch query over the API of elasticsearch.
 
 The plugin is currently capable to return the total hits of documents based on a provided query string.
-For more information to the syntax, please visit: [Elasticserach documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-query-string-query.html)
+For more information to the syntax, please visit: [Elasticsearch documentation](https://www.elastic.co/guide/en/elasticsearch/reference/current/query-dsl-query-string-query.html)
 
 ## Usage
 

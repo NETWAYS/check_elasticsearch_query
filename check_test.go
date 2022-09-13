@@ -18,15 +18,13 @@ func TestConfig_Validate(t *testing.T) {
 	c.messageKey = "message"
 
 	assert.NoError(t, c.Validate())
-	assert.True(t, c.validated)
 }
 
 func TestBuildConfigFlags(t *testing.T) {
 	fs := &pflag.FlagSet{}
-	config := BuildConfigFlags(fs)
+	BuildConfigFlags(fs)
 
 	assert.True(t, fs.HasFlags())
-	assert.False(t, config.validated)
 }
 
 func TestConfig_Run(t *testing.T) {
