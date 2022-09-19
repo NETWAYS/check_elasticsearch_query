@@ -1,4 +1,4 @@
-module github.com/NETWAYS/check_elasticsearch
+module github.com/NETWAYS/check_elasticsearch_query
 
 go 1.14
 
