@@ -1,3 +1,5 @@
+This Plugin is DEPRECATED - See https://github.com/NETWAYS/check_elasticsearch/
+
 check_elasticsearch_query
 =========================
 
